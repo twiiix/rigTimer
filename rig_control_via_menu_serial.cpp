@@ -365,9 +365,9 @@ void setup() {
   Serial.begin(57600);
   //setup ethernet
    // Change 'SS' to your Slave Select pin, if you arn't using the default pin
-  Serial.println("Trying to get an IP…");
+  Serial.println(F("Trying to get an IP…"));
  
-  Serial.print("MAC: ");
+  Serial.print(F("MAC: "));
   for (byte i = 0; i < 6; ++i) {
   Serial.print(mymac[i], HEX);
   if (i < 5)
@@ -377,25 +377,25 @@ void setup() {
    
   if (ether.begin(sizeof Ethernet::buffer, mymac) == 0)
   {
-  Serial.println("Failed to access Ethernet controller");
+  Serial.println(F("Failed to access Ethernet controller"));
   }
   else
   {
-  Serial.println("Ethernet controller access: OK");
+  Serial.println(F("Ethernet controller access: OK"));
   }
   
    
   #if STATIC
-  Serial.println( "Getting static IP.");
+  Serial.println(F("Getting static IP."));
   if (!ether.staticSetup(myip, gwip)){
-  Serial.println( "could not get a static IP");
+  Serial.println(F("could not get a static IP"));
   blinkLed(); // blink forever to indicate a problem
   }
   #else
    
-  Serial.println("Setting up DHCP");
+  Serial.println(F("Setting up DHCP"));
   if (!ether.dhcpSetup()){
-  Serial.println( "DHCP failed");
+  Serial.println(F("DHCP failed"));
   //blinkLed(); // blink forever to indicate a problem
   }
   #endif
@@ -417,26 +417,29 @@ void loop(){
     word pos = ether.packetLoop(len);
  
     //start rig website
+    if (!isWorking){
     if(strstr((char *)Ethernet::buffer + pos, "GET /?ON") != 0) {
-    Serial.println("Received ON command");
+    Serial.println(F("Received ON command"));
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
     delay(1000);
-     
+    isWorking = !isWorking;
+    }}
+    if (isWorking){
     // stop rig website
     if(strstr((char *)Ethernet::buffer + pos, "GET /?OFF") != 0) {
-    Serial.println("Received OFF command");
+    Serial.println(F("Received OFF command"));
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
     delay(1000);
-    }
-     
+    isWorking = !isWorking;
+    }}
+    
     // show some data to the user
-   memcpy_P(ether.tcpOffset(), page, sizeof page);
-   ether.httpServerReply(sizeof page - 1);
-    }
+//   memcpy_P(ether.tcpOffset(), page, sizeof page);
+//   ether.httpServerReply(sizeof page - 1);
    // ether.httpServerReply(dhtValuePage()); // send web page data
   //Serial.println(readTemp());
   //logTemp();
