@@ -423,7 +423,7 @@ void loop(){
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
-    delay(1000);
+    delay(2000);
     isWorking = !isWorking;
     }}
     if (isWorking){
@@ -433,7 +433,7 @@ void loop(){
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
-    delay(1000);
+    delay(2000);
     isWorking = !isWorking;
     }}
     
