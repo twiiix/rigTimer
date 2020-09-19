@@ -58,36 +58,26 @@ int isWorking = false;
 int timerWorking = true;
 
 
-
-void logTemp(void){
-  if (isWorking)
-  {
-    if (millis()%8 == 0)
-    {
-      sensors.requestTemperatures();
-      float tempValue = sensors.getTempCByIndex(0);
-      Serial.print("Température: ");
-      Serial.print("");
-      Serial.print(tempValue);
-      Serial.print(" C°");
-      Serial.println("");
-    }
-  }
-}
-
 void debuging(void){
   timeStart = millis();
   if (timeStart %(1000*60) == 0){
-  Serial.println(" ");
-  Serial.print("La valeur de isWorking est = a");
-  Serial.print(" ");
+  Serial.println(F(" "));
+  Serial.print(F("La valeur de isWorking est = a"));
+  Serial.print(F(" "));
   Serial.print(isWorking);
   Serial.println(" ");
   int runCheckValue = analogRead(runCheck);
   Serial.println(" ");
-  Serial.print("runCheckValue = ");
+  Serial.print(F("runCheckValue = "));
   Serial.print(runCheckValue);
   Serial.println(" ");
+  sensors.requestTemperatures();
+  float tempValue = sensors.getTempCByIndex(0);
+  Serial.print(F("Température: "));
+  Serial.print(F(""));
+  Serial.print(tempValue);
+  Serial.print(F(" C°"));
+  Serial.println(F(""));
   }
 }
 
@@ -108,6 +98,7 @@ long since(){
   sinceS = now.second();
   sinceDay = now.day();
   sinceMonth = now.month();
+  sinceYear = now.year();
 }
 
 void timers(){ // horaire du rig.
@@ -161,7 +152,7 @@ float readTemp(){
   return tempValue;
 }
 
-void menu(void){
+void menu(void){ //menu de contrôle du rig
   Serial.println(F(""));
   Serial.println(F("^^^ Liste des commandes: ^^^"));
   Serial.println(F("? -> Affice le Menu."));
@@ -171,7 +162,7 @@ void menu(void){
   Serial.println(F("a -> active/désactive le timer."));
 }
 
-void resumer(void){
+void resumer(void){ //menu serie resumer activité minière
   DateTime now = rtc.now();
   Serial.println(F(" "));
   Serial.println(F("Résumé de l'activité minière:"));
@@ -347,19 +338,16 @@ void resumer(void){
   Serial.println();
 }
 
-char const page[] PROGMEM = {
+char const page[] PROGMEM = { //page web
     "HTTP/2.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
-    //"Pragma: no-cache\r\n"
+    //"Pragma: cache\r\n"
     "\r\n"
     "<meta http-equiv='refresh' content='1'/>"
     "<title>RigControl</title>"
-    "<h1>DashBoard Arduino Rig1</h1></br>"
-    "<div>The syntax: http://192.168.0.20/?OFF or ON</div>"
-    "<span id=on><a href='http://192.168.0.20/?ON'>ON</a></span></br>"
-    "<a href='http://192.168.0.20/?OFF'>OFF</a>"
-}
-;
+    "<h1>Merci d'utiliser l'app. RigControl</br>"
+    "<div>pour les contributions:</br>ETH WALLET: 0x6d7adc94eed5645467e1087b5b3cbe4f9f56e4d6</br>BTC WALLET: 115K3ZpjPrtkw1fyQSEM2dNzUsgrPiD7Ns</div></h1>"
+};
 void setup() {
   Wire.begin();
   Serial.begin(57600);
@@ -423,8 +411,9 @@ void loop(){
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
-    delay(2000);
-    isWorking = !isWorking;
+    since();
+    delay(20000);
+    isWorking = !isWorking;    
     }}
     if (isWorking){
     // stop rig website
@@ -433,22 +422,18 @@ void loop(){
     digitalWrite(start, HIGH);
     delay(150);
     digitalWrite(start, LOW);
-    delay(2000);
+    since();
+    delay(20000);
     isWorking = !isWorking;
-    }}
-    
+    }}    
     // show some data to the user
-//   memcpy_P(ether.tcpOffset(), page, sizeof page);
-//   ether.httpServerReply(sizeof page - 1);
-   // ether.httpServerReply(dhtValuePage()); // send web page data
-  //Serial.println(readTemp());
-  //logTemp();
-  //    tempCheck()
+   memcpy_P(ether.tcpOffset(), page, sizeof page);
+   ether.httpServerReply(sizeof page - 1);
   DateTime now = rtc.now();
   timers();
   isRunning();
-  debuging();
-  //Serial.println(runCheck);
+  //debuging();
+  //Serial.println(runCheckValue);
   if (Serial.available() > 0)
   {                         //  verifie si le port serie est près a recevoir
     rxChar = Serial.read(); //  recupère les caractères passée via le voie serier dans une var.
