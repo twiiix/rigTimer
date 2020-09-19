@@ -3,51 +3,66 @@
   from: Bruxelles, Belgium
   BTC / ETH address: 115K3ZpjPrtkw1fyQSEM2dNzUsgrPiD7Ns / 0x6D7Adc94EEd5645467E1087B5b3CBe4F9f56E4d6
 */
-
 // include the library code:
 #include <Wire.h> // consulter la doc de Wire pour les E/S du module DS1307 en fonction de votre carte arduino
 #include "RTClib.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <EtherCard.h>
+#include <avr/pgmspace.h>
+//define variable
 #define ONE_WIRE_BUS A0 //Sonde DS18B20
 #define start 2         // pin qui controle l'optocoupleur
 #define relais 3        //pin du relais de sécurité qui permet de coupé l'alim. du Rig
 #define runCheck A1     //pin brancher sur la pin 3.3v du TMP Header de ma carte mère.
+#define REQUEST_RATE 5000 // milliseconds to ethercard
 char rxChar = 0;        // var pour les entrées series.
 unsigned int sinceH;    //  """""""""""" contennir l'heure du dernier démarage.
 unsigned int sinceM;
 unsigned int sinceS;
+unsigned int sinceDay;
+unsigned int sinceMonth;
+unsigned int sinceYear;
+long int timeStart;
 
 
 //----------------------------------------------
 // configuration a editer par l"utilisateur
 // déclaration de l'horaire de démarage
-const int hStart = 23; // Heurre de démarage du rig
+const int hStart = 22; // Heurre de démarage du rig
 const int mStart = 30;  // Minute (sans "0" devant le chiffre) de démarage du rig
 const int sStart = 0;  // Seconde de démarage du rig
 
 // déclaration de l'horaire d'arrêt
-const int hStop = 7; // Heurre d'arrêt du rig
+const int hStop = 6; // Heurre d'arrêt du rig
 const int mStop = 30; // Minute (sans "0" devant le chiffre) de démarage du rig
 const int sStop = 0; // Seconde d'arrêt du rig
 //fin edition utilisateur
 //----------------------------------------------
 
-int isWorking = false;
-int timerWorking = true;
-int isHigh = true;
+//config ethernet
+// ethernet interface mac address
+// ethernet mac address - must be unique on your network
+static byte mymac[] = { 0x74,0x69,0x69,0x2D,0x30,0x31 };
+byte Ethernet::buffer[900]; // tcp/ip send and receive buffer
+
 
 //ajouter  RTClib
 RTC_DS1307 rtc;
 //ajout de oneWire
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
+//BufferFiller bfill;
 
-void logTemp(void)
-{
+int isWorking = false;
+int timerWorking = true;
+
+
+
+void logTemp(void){
   if (isWorking)
   {
-    if (millis()%1000000 == 0)
+    if (millis()%8 == 0)
     {
       sensors.requestTemperatures();
       float tempValue = sensors.getTempCByIndex(0);
@@ -60,23 +75,44 @@ void logTemp(void)
   }
 }
 
-void isRunning()
-{
+void debuging(void){
+  timeStart = millis();
+  if (timeStart %(1000*60) == 0){
+  Serial.println(" ");
+  Serial.print("La valeur de isWorking est = a");
+  Serial.print(" ");
+  Serial.print(isWorking);
+  Serial.println(" ");
   int runCheckValue = analogRead(runCheck);
-  if (runCheckValue > 15 && !isWorking)
-  {
-    isWorking = true;
-  }
-  if (runCheckValue < 14 && isWorking)
-  {
-    isWorking = false;
+  Serial.println(" ");
+  Serial.print("runCheckValue = ");
+  Serial.print(runCheckValue);
+  Serial.println(" ");
   }
 }
 
-void timer()
-{
+void isRunning(){ // verifie l'état de fonctionnement du rig via la lecture d'un pin sur la cm
+
+  int runCheckValue = analogRead(runCheck);
+  if (runCheckValue < 500) {
+    isWorking = false;
+  } else {
+    isWorking = true;
+  }
+}
+
+long since(){
   DateTime now = rtc.now();
-  if (!isWorking)
+  sinceH = now.hour();
+  sinceM = now.minute();
+  sinceS = now.second();
+  sinceDay = now.day();
+  sinceMonth = now.month();
+}
+
+void timers(){ // horaire du rig.
+  DateTime now = rtc.now();
+  if (!isWorking && timerWorking)
   {
     if (now.hour() == hStart && now.minute() == mStart && now.second() == sStart)
     {
@@ -97,7 +133,7 @@ void timer()
       since();
     }
   }
-  if (isWorking)
+  if (isWorking && timerWorking)
   {
     if (now.hour() == hStop && now.minute() == mStop && now.second() == sStop)
     {
@@ -119,43 +155,32 @@ void timer()
   }
 }
 
-int since()
-{
-  DateTime now = rtc.now();
-  sinceH = now.hour();
-  sinceM = now.minute();
-  sinceS = now.second();
-}
-
-float readTemp()
-{
+float readTemp(){
   sensors.requestTemperatures();
   float tempValue = sensors.getTempCByIndex(0);
   return tempValue;
 }
 
-void menu(void)
-{
-  Serial.println("");
-  Serial.println("^^^ Liste des commandes: ^^^");
-  Serial.println("? -> Affice le Menu.");
-  Serial.println("r -> Affiche le résumé des options du Rig.");
-  Serial.println("d -> Démarre le Rig.");
-  Serial.println("s -> Arrête le Rig.");
-  Serial.println("a -> active/désactive le timer.");
+void menu(void){
+  Serial.println(F(""));
+  Serial.println(F("^^^ Liste des commandes: ^^^"));
+  Serial.println(F("? -> Affice le Menu."));
+  Serial.println(F("r -> Affiche le résumé des options du Rig."));
+  Serial.println(F("d -> Démarre le Rig."));
+  Serial.println(F("s -> Arrête le Rig."));
+  Serial.println(F("a -> active/désactive le timer."));
 }
 
-void resumer(void)
-{
+void resumer(void){
   DateTime now = rtc.now();
-  Serial.println(" ");
-  Serial.println("Résumé de l'activité minière:");
-  Serial.println("*****************************");
-  Serial.print("Heure courante:");
-  Serial.print(" ");
+  Serial.println(F(" "));
+  Serial.println(F("Résumé de l'activité minière:"));
+  Serial.println(F("*****************************"));
+  Serial.print(F("Heure courante:"));
+  Serial.print(F(" "));
   if (now.hour() < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(now.hour(), DEC);
   }
   else
@@ -175,7 +200,7 @@ void resumer(void)
   Serial.print(':');
   if (now.second() < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(now.second(), DEC);
   }
   else
@@ -183,10 +208,10 @@ void resumer(void)
     Serial.print(now.second(), DEC);
   }
   Serial.println();
-  Serial.print("Heure de démarrage:");
+  Serial.print(F("Heure de démarrage:"));
   if (hStart < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(hStart);
   }
   else
@@ -196,17 +221,17 @@ void resumer(void)
   Serial.print(':');
   if (mStart < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(mStart);
   }
   else
   {
     Serial.print(mStart);
   }
-  Serial.print(':');
+  Serial.print(F(":"));
   if (sStart < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(sStart);
   }
   else
@@ -214,30 +239,30 @@ void resumer(void)
     Serial.print(sStart);
   }
   Serial.println();
-  Serial.print("Heure d'arrêt:");
+  Serial.print(F("Heure d'arrêt:"));
   if (hStop < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(hStop);
   }
   else
   {
     Serial.print(hStop);
   }
-  Serial.print(':');
+  Serial.print(F(":"));
   if (mStop < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(mStop);
   }
   else
   {
     Serial.print(mStop);
   }
-  Serial.print(':');
+    Serial.print(F(":"));
   if (sStop < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(sStop);
   }
   else
@@ -245,62 +270,62 @@ void resumer(void)
     Serial.print(sStop);
   }
   Serial.println();
-  Serial.print("Date et heure du dernier démarage:");
-  Serial.print(" ");
-  Serial.print(now.day(), DEC);
-  Serial.print("/");
-  Serial.print(now.month(), DEC);
-  Serial.print("/");
-  Serial.print(now.year(), DEC);
-  Serial.print(" - ");
+  Serial.print(F("Date et heure du dernier démarage:"));
+  Serial.print(F(" "));
+  Serial.print(sinceDay);
+  Serial.print(F("/"));
+  Serial.print(sinceMonth);
+  Serial.print(F("/"));
+  Serial.print(sinceYear);
+  Serial.print(F(" - "));
   if (sinceH < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(sinceH);
-    Serial.print(":");
+    Serial.print(F(":"));
   }
   else
   {
     Serial.print(sinceH);
-    Serial.print(":");
+    Serial.print(F(":"));
   }
   if (sinceM < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(sinceM);
-    Serial.print(":");
+    Serial.print(F(":"));
   }
   else
   {
     Serial.print(sinceM);
-    Serial.print(":");
+    Serial.print(F(":"));
   }
   if (sinceS < 10)
   {
-    Serial.print("0");
+    Serial.print(F("0"));
     Serial.print(sinceS);
   }
   else
   {
     Serial.print(sinceS);
   }
-  Serial.println("");
-  Serial.print("Le Rig tourne:");
+  Serial.println(F(""));
+  Serial.print(F("Le Rig tourne:"));
   if (isWorking)
   {
-    Serial.print(" ");
-    Serial.print("Oui!");
-    Serial.println("");
+    Serial.print(F(" "));
+    Serial.print(F("Oui!"));
+    Serial.println(F(""));
   }
   else
   {
-    Serial.print(" ");
+    Serial.print(F(" "));
 
-    Serial.print("Non!");
-    Serial.println("");
+    Serial.print(F("Non!"));
+    Serial.println(F(""));
   }
 
-  Serial.print("Etat du Timer:");
+  Serial.print(F("Etat du Timer:"));
   if (timerWorking)
   {
 
@@ -310,22 +335,70 @@ void resumer(void)
   }
   else
   {
-    Serial.print(" ");
-    Serial.print("Désctivé :(( - entre 'd' pour faire courir ton rig.");
+    Serial.print(F(" "));
+    Serial.print(F("Désactivé :(( - entre 'd' pour faire courir ton rig."));
   }
   Serial.println();
-  Serial.print("Température au seins de la plate-forme:");
-  Serial.print(" ");
+  Serial.print(F("Température au seins de la plate-forme:"));
+  Serial.print(F(" "));
   Serial.print(readTemp());
-  Serial.print("°");
-  Serial.print(" Celsius.");
+  Serial.print(F("°"));
+  Serial.print(F(" Celsius."));
   Serial.println();
 }
 
-void setup()
-{
+char const page[] PROGMEM = {
+    "HTTP/2.0 200 OK\r\n"
+    "Content-Type: text/html\r\n"
+    //"Pragma: no-cache\r\n"
+    "\r\n"
+    "<meta http-equiv='refresh' content='1'/>"
+    "<title>RigControl</title>"
+    "<h1>DashBoard Arduino Rig1</h1></br>"
+    "<div>The syntax: http://192.168.0.20/?OFF or ON</div>"
+    "<span id=on><a href='http://192.168.0.20/?ON'>ON</a></span></br>"
+    "<a href='http://192.168.0.20/?OFF'>OFF</a>"
+}
+;
+void setup() {
   Wire.begin();
-  Serial.begin(9600);
+  Serial.begin(57600);
+  //setup ethernet
+   // Change 'SS' to your Slave Select pin, if you arn't using the default pin
+  Serial.println("Trying to get an IP…");
+ 
+  Serial.print("MAC: ");
+  for (byte i = 0; i < 6; ++i) {
+  Serial.print(mymac[i], HEX);
+  if (i < 5)
+  Serial.print(":");
+  }
+  Serial.println();
+   
+  if (ether.begin(sizeof Ethernet::buffer, mymac) == 0)
+  {
+  Serial.println("Failed to access Ethernet controller");
+  }
+  else
+  {
+  Serial.println("Ethernet controller access: OK");
+  }
+  
+   
+  #if STATIC
+  Serial.println( "Getting static IP.");
+  if (!ether.staticSetup(myip, gwip)){
+  Serial.println( "could not get a static IP");
+  blinkLed(); // blink forever to indicate a problem
+  }
+  #else
+   
+  Serial.println("Setting up DHCP");
+  if (!ether.dhcpSetup()){
+  Serial.println( "DHCP failed");
+  //blinkLed(); // blink forever to indicate a problem
+  }
+  #endif
   rtc.begin();
   sensors.begin();
   //rtc.adjust(DateTime(__DATE__,__TIME__));
@@ -338,18 +411,41 @@ void setup()
   menu();
 }
 
-void loop()
-{
+void loop(){
+  //ethernet loop
+    word len = ether.packetReceive();
+    word pos = ether.packetLoop(len);
+ 
+    //start rig website
+    if(strstr((char *)Ethernet::buffer + pos, "GET /?ON") != 0) {
+    Serial.println("Received ON command");
+    digitalWrite(start, HIGH);
+    delay(150);
+    digitalWrite(start, LOW);
+    delay(1000);
+     
+    // stop rig website
+    if(strstr((char *)Ethernet::buffer + pos, "GET /?OFF") != 0) {
+    Serial.println("Received OFF command");
+    digitalWrite(start, HIGH);
+    delay(150);
+    digitalWrite(start, LOW);
+    delay(1000);
+    }
+     
+    // show some data to the user
+   memcpy_P(ether.tcpOffset(), page, sizeof page);
+   ether.httpServerReply(sizeof page - 1);
+    }
+   // ether.httpServerReply(dhtValuePage()); // send web page data
   //Serial.println(readTemp());
-  logTemp();
-  if (timerWorking)
-  {
-    timer();
-  }
+  //logTemp();
   //    tempCheck()
-  isRunning();
   DateTime now = rtc.now();
-  timer();
+  timers();
+  isRunning();
+  debuging();
+  //Serial.println(runCheck);
   if (Serial.available() > 0)
   {                         //  verifie si le port serie est près a recevoir
     rxChar = Serial.read(); //  recupère les caractères passée via le voie serier dans une var.
@@ -360,16 +456,16 @@ void loop()
     case 'A':
       if (timerWorking)
       {
-        Serial.println(" ");
-        Serial.println("Désactivation du timer");
-        Serial.println(" ");
+        Serial.println(F(" "));
+        Serial.println(F("Désactivation du timer"));
+        Serial.println(F(" "));
         timerWorking = !timerWorking;
       }
       else
       {
-        Serial.println(" ");
-        Serial.println("Réactivation du timer");
-        Serial.println(" ");
+        Serial.println(F(" "));
+        Serial.println(F("Réactivation du timer"));
+        Serial.println(F(" "));
         timerWorking = !timerWorking;
       }
       break;
@@ -400,8 +496,8 @@ void loop()
       else
       {
         Serial.println("");
-        Serial.print("Le rig cours déjà?! ");
-        Serial.println("");
+        Serial.print(F("Le rig cours déjà?! "));
+        Serial.println(F(""));
       }
       break;
     case 's':
@@ -413,8 +509,8 @@ void loop()
         digitalWrite(start, LOW);
         isWorking = !isWorking;
         delay(1000);
-        Serial.println("");
-        Serial.print("Arrêté à:");
+        Serial.println(F(""));
+        Serial.print(F("Arrêté à:"));
         Serial.print(" ");
         Serial.print(now.hour(), DEC);
         Serial.print(':');
@@ -425,9 +521,9 @@ void loop()
       }
       else
       {
-        Serial.println("");
-        Serial.print("Le rig est déjà éteint?! non?");
-        Serial.println("");
+        Serial.println(F(""));
+        Serial.print(F("Le rig est déjà éteint?! non?"));
+        Serial.println(F(""));
       }
       break;
     case '?':
