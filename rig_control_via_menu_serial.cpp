@@ -20,10 +20,6 @@ char rxChar = 0;        // var pour les entrées series.
 unsigned int sinceH;    //  """""""""""" contennir l'heure du dernier démarage.
 unsigned int sinceM;
 unsigned int sinceS;
-unsigned int sinceDay;
-unsigned int sinceMonth;
-unsigned int sinceYear;
-long int timeStart;
 
 
 //----------------------------------------------
@@ -39,12 +35,12 @@ const int mStop = 30; // Minute (sans "0" devant le chiffre) de démarage du rig
 const int sStop = 0; // Seconde d'arrêt du rig
 //fin edition utilisateur
 //----------------------------------------------
-
+long int timeStart;
 //config ethernet
 // ethernet interface mac address
 // ethernet mac address - must be unique on your network
 static byte mymac[] = { 0x74,0x69,0x69,0x2D,0x30,0x31 };
-byte Ethernet::buffer[900]; // tcp/ip send and receive buffer
+byte Ethernet::buffer[500]; // tcp/ip send and receive buffer
 
 
 //ajouter  RTClib
@@ -52,32 +48,42 @@ RTC_DS1307 rtc;
 //ajout de oneWire
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
-//BufferFiller bfill;
+BufferFiller bfill;
 
 int isWorking = false;
 int timerWorking = true;
 
 
+
+void logTemp(void){
+  if (isWorking)
+  {
+    if (millis()%8 == 0)
+    {
+      sensors.requestTemperatures();
+      float tempValue = sensors.getTempCByIndex(0);
+      Serial.print("Température: ");
+      Serial.print("");
+      Serial.print(tempValue);
+      Serial.print(" C°");
+      Serial.println("");
+    }
+  }
+}
+
 void debuging(void){
   timeStart = millis();
   if (timeStart %(1000*60) == 0){
-  Serial.println(F(" "));
-  Serial.print(F("La valeur de isWorking est = a"));
-  Serial.print(F(" "));
+  Serial.println(" ");
+  Serial.print("La valeur de isWorking est = a");
+  Serial.print(" ");
   Serial.print(isWorking);
   Serial.println(" ");
   int runCheckValue = analogRead(runCheck);
   Serial.println(" ");
-  Serial.print(F("runCheckValue = "));
+  Serial.print("runCheckValue = ");
   Serial.print(runCheckValue);
   Serial.println(" ");
-  sensors.requestTemperatures();
-  float tempValue = sensors.getTempCByIndex(0);
-  Serial.print(F("Température: "));
-  Serial.print(F(""));
-  Serial.print(tempValue);
-  Serial.print(F(" C°"));
-  Serial.println(F(""));
   }
 }
 
@@ -96,12 +102,9 @@ long since(){
   sinceH = now.hour();
   sinceM = now.minute();
   sinceS = now.second();
-  sinceDay = now.day();
-  sinceMonth = now.month();
-  sinceYear = now.year();
 }
 
-void timers(){ // horaire du rig.
+void timers(){
   DateTime now = rtc.now();
   if (!isWorking && timerWorking)
   {
@@ -152,7 +155,7 @@ float readTemp(){
   return tempValue;
 }
 
-void menu(void){ //menu de contrôle du rig
+void menu(void){
   Serial.println(F(""));
   Serial.println(F("^^^ Liste des commandes: ^^^"));
   Serial.println(F("? -> Affice le Menu."));
@@ -162,7 +165,7 @@ void menu(void){ //menu de contrôle du rig
   Serial.println(F("a -> active/désactive le timer."));
 }
 
-void resumer(void){ //menu serie resumer activité minière
+void resumer(void){
   DateTime now = rtc.now();
   Serial.println(F(" "));
   Serial.println(F("Résumé de l'activité minière:"));
@@ -263,11 +266,11 @@ void resumer(void){ //menu serie resumer activité minière
   Serial.println();
   Serial.print(F("Date et heure du dernier démarage:"));
   Serial.print(F(" "));
-  Serial.print(sinceDay);
+  Serial.print(now.day(), DEC);
   Serial.print(F("/"));
-  Serial.print(sinceMonth);
+  Serial.print(now.month(), DEC);
   Serial.print(F("/"));
-  Serial.print(sinceYear);
+  Serial.print(now.year(), DEC);
   Serial.print(F(" - "));
   if (sinceH < 10)
   {
@@ -338,55 +341,36 @@ void resumer(void){ //menu serie resumer activité minière
   Serial.println();
 }
 
-char const page[] PROGMEM = { //page web
+static word dhtValuePage() {
+    bfill = ether.tcpOffset();
+    bfill.emit_p(PSTR(
     "HTTP/2.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
-    //"Pragma: cache\r\n"
+    "Pragma: no-cache\r\n"
     "\r\n"
     "<meta http-equiv='refresh' content='1'/>"
-    "<title>RigControl</title>"
-    "<h1>Merci d'utiliser l'app. RigControl</br>"
-    "<div>pour les contributions:</br>ETH WALLET: 0x6d7adc94eed5645467e1087b5b3cbe4f9f56e4d6</br>BTC WALLET: 115K3ZpjPrtkw1fyQSEM2dNzUsgrPiD7Ns</div></h1>"
-};
+    "<title>RigControl</title>"));
+     bfill.emit_p(PSTR(
+    "<h1>Futur dashbord technique</h1>"));
+    return bfill.position();
+}
+
 void setup() {
   Wire.begin();
   Serial.begin(57600);
   //setup ethernet
    // Change 'SS' to your Slave Select pin, if you arn't using the default pin
-  Serial.println(F("Trying to get an IP…"));
- 
-  Serial.print(F("MAC: "));
-  for (byte i = 0; i < 6; ++i) {
-  Serial.print(mymac[i], HEX);
-  if (i < 5)
-  Serial.print(":");
-  }
-  Serial.println();
-   
-  if (ether.begin(sizeof Ethernet::buffer, mymac) == 0)
-  {
-  Serial.println(F("Failed to access Ethernet controller"));
-  }
-  else
-  {
-  Serial.println(F("Ethernet controller access: OK"));
-  }
-  
-   
-  #if STATIC
-  Serial.println(F("Getting static IP."));
-  if (!ether.staticSetup(myip, gwip)){
-  Serial.println(F("could not get a static IP"));
-  blinkLed(); // blink forever to indicate a problem
-  }
-  #else
-   
-  Serial.println(F("Setting up DHCP"));
-  if (!ether.dhcpSetup()){
-  Serial.println(F("DHCP failed"));
-  //blinkLed(); // blink forever to indicate a problem
-  }
-  #endif
+  if (ether.begin(sizeof Ethernet::buffer, mymac, SS) == 0)
+    Serial.println( "Failed to access Ethernet controller");
+  if (!ether.dhcpSetup())
+    Serial.println("DHCP failed");
+
+  ether.printIp("My IP: ", ether.myip);
+  // ether.printIp("Netmask:// Wait a few seconds between measurements.
+    delay(2000);
+  ether.printIp("GW IP: ", ether.gwip);
+  ether.printIp("DNS IP: ", ether.dnsip);
+
   rtc.begin();
   sensors.begin();
   //rtc.adjust(DateTime(__DATE__,__TIME__));
@@ -401,39 +385,21 @@ void setup() {
 
 void loop(){
   //ethernet loop
+    ether.packetLoop(ether.packetReceive());
+
     word len = ether.packetReceive();
     word pos = ether.packetLoop(len);
- 
-    //start rig website
-    if (!isWorking){
-    if(strstr((char *)Ethernet::buffer + pos, "GET /?ON") != 0) {
-    Serial.println(F("Received ON command"));
-    digitalWrite(start, HIGH);
-    delay(150);
-    digitalWrite(start, LOW);
-    since();
-    delay(20000);
-    isWorking = !isWorking;    
-    }}
-    if (isWorking){
-    // stop rig website
-    if(strstr((char *)Ethernet::buffer + pos, "GET /?OFF") != 0) {
-    Serial.println(F("Received OFF command"));
-    digitalWrite(start, HIGH);
-    delay(150);
-    digitalWrite(start, LOW);
-    since();
-    delay(20000);
-    isWorking = !isWorking;
-    }}    
-    // show some data to the user
-   memcpy_P(ether.tcpOffset(), page, sizeof page);
-   ether.httpServerReply(sizeof page - 1);
+
+  if (pos)  // check if valid tcp data is received
+    ether.httpServerReply(dhtValuePage()); // send web page data
+  //Serial.println(readTemp());
+  //logTemp();
+  //    tempCheck()
   DateTime now = rtc.now();
   timers();
   isRunning();
-  //debuging();
-  //Serial.println(runCheckValue);
+  debuging();
+  //Serial.println(runCheck);
   if (Serial.available() > 0)
   {                         //  verifie si le port serie est près a recevoir
     rxChar = Serial.read(); //  recupère les caractères passée via le voie serier dans une var.
